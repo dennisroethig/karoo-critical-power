@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2025-01-10
+
+### Added
+
+- **Per Ride Mode** - New comparison mode that works without intervals.icu configuration
+  - Compare your current effort against your best this ride
+  - Bars update dynamically as you set new bests
+  - Automatically used as fallback when intervals.icu is not configured
+
+### Changed
+
+- Extension now works out of the box without any configuration required
+
 ## [1.0.0] - 2025-01-10
 
 ### Features
