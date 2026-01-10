@@ -1,5 +1,7 @@
 # Karoo Critical Power
 
+> **⚠️ Beta Release** - This extension is in active development. It works well but may have rough edges. Feedback and bug reports welcome via [GitHub Issues](https://github.com/dennisroethig/karoo-critical-power/issues).
+
 A Karoo 3 extension that displays "Critical Power" data fields for specific durations during a ride, with optional comparison to your PRs from intervals.icu.
 
 ## Features
@@ -53,7 +55,9 @@ After installing, add the data fields to your ride profile:
 
 ## Configuration (Optional)
 
-To see your PRs from intervals.icu during rides:
+**No configuration needed for basic use!** The extension works out of the box in "Per Ride" mode, comparing your current effort against your best this ride.
+
+To compare against your historical PRs from intervals.icu:
 
 1. **Get your intervals.icu API key:**
    - Log in to [intervals.icu](https://intervals.icu)
@@ -64,10 +68,11 @@ To see your PRs from intervals.icu during rides:
 2. **Configure the extension:**
    - On your Karoo, find and open the **Critical Power** app
    - Enter your API Key and Athlete ID
-   - Choose your PR timeframe:
+   - Choose your comparison mode:
      - **All-time** - Compare against your best ever
      - **90 days** - Compare against recent PRs
      - **42 days** - Compare against very recent PRs
+     - **Per Ride** - Compare against your best effort this ride (no intervals.icu needed)
    - Tap "Test Connection" to verify it works
 
 ## Building from Source
