@@ -8,7 +8,8 @@ import kotlinx.serialization.Serializable
 enum class PrTimeframe(val days: Int?, val displayName: String) {
     ALL_TIME(null, "All Time"),
     DAYS_90(90, "Last 90 Days"),
-    DAYS_42(42, "Last 42 Days")
+    DAYS_42(42, "Last 42 Days"),
+    PER_RIDE(-1, "Per Ride")
 }
 
 /**

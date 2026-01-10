@@ -16,6 +16,7 @@ import io.hammerhead.karooext.models.UpdateGraphicConfig
 import io.hammerhead.karooext.models.ViewConfig
 import io.hammerhead.karoocriticalpower.PowerBuffer
 import io.hammerhead.karoocriticalpower.data.PowerCurveRepository
+import io.hammerhead.karoocriticalpower.data.PrTimeframe
 import io.hammerhead.karoocriticalpower.extensions.streamDataFlow
 import io.hammerhead.karoocriticalpower.views.PowerWithPrView
 import kotlinx.coroutines.CoroutineScope
@@ -43,7 +44,9 @@ abstract class CriticalPowerDataType(
     private val durationSeconds: Int,
     typeIdSuffix: String,
     private val powerCurveRepository: PowerCurveRepository,
-    private val showPrComparison: () -> Boolean
+    private val showPrComparison: () -> Boolean,
+    private val getPrTimeframe: () -> PrTimeframe,
+    private val isIntervalsConfigured: () -> Boolean
 ) : DataTypeImpl(extensionId, "critical-power-$typeIdSuffix") {
 
     companion object {
@@ -165,14 +168,27 @@ abstract class CriticalPowerDataType(
                     val watts = state.dataPoint.singleValue
                     if (watts != null && watts >= 0) {
                         powerBuffer.addSample(watts)
-                        val bestPower = powerBuffer.getBestAverage()
-                        currentBestPower = bestPower?.toInt()
+                        val bestPower = powerBuffer.getBestAverage()?.toInt()
+                        val currentRolling = powerBuffer.getCurrentAverage()?.toInt()
+                        currentBestPower = bestPower
 
-                        val showPr = showPrComparison()
-                        val pr = if (showPr) powerCurveRepository.getPrForDuration(durationSeconds)?.toInt() else null
+                        // Check if we should use per-ride mode
+                        val prTimeframe = getPrTimeframe()
+                        val isConfigured = isIntervalsConfigured()
+                        val usePerRideMode = prTimeframe == PrTimeframe.PER_RIDE || !isConfigured
 
-                        Log.d(TAG, "Power update for $durationSeconds: power=$currentBestPower, pr=$pr")
-                        renderView(currentBestPower, pr)
+                        val (displayPower, referencePower) = if (usePerRideMode) {
+                            // Per Ride mode: show current rolling average vs current ride's best
+                            currentRolling to bestPower
+                        } else {
+                            // PR mode: show current ride's best vs historical PR
+                            val showPr = showPrComparison()
+                            val historicalPr = if (showPr) powerCurveRepository.getPrForDuration(durationSeconds)?.toInt() else null
+                            bestPower to historicalPr
+                        }
+
+                        Log.d(TAG, "Power update for $durationSeconds: power=$displayPower, ref=$referencePower, perRide=$usePerRideMode")
+                        renderView(displayPower, referencePower)
                     }
                 }
         }

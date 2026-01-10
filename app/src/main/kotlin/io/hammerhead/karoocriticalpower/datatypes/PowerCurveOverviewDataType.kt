@@ -16,6 +16,7 @@ import io.hammerhead.karooext.models.StreamState
 import io.hammerhead.karooext.models.ViewConfig
 import io.hammerhead.karoocriticalpower.PowerBuffer
 import io.hammerhead.karoocriticalpower.data.PowerCurveRepository
+import io.hammerhead.karoocriticalpower.data.PrTimeframe
 import io.hammerhead.karoocriticalpower.extensions.streamDataFlow
 import io.hammerhead.karoocriticalpower.views.PowerBarData
 import io.hammerhead.karoocriticalpower.views.PowerBarsView
@@ -43,7 +44,9 @@ class PowerCurveOverviewDataType(
     extensionId: String,
     private val karooSystem: KarooSystemService,
     private val powerCurveRepository: PowerCurveRepository,
-    private val showPrComparison: () -> Boolean
+    private val showPrComparison: () -> Boolean,
+    private val getPrTimeframe: () -> PrTimeframe,
+    private val isIntervalsConfigured: () -> Boolean
 ) : DataTypeImpl(extensionId, "power-curve-overview") {
 
     companion object {
@@ -139,22 +142,38 @@ class PowerCurveOverviewDataType(
         viewJob = scope.launch {
             // Helper to build bar data from current state
             fun buildBars(): List<PowerBarData> {
+                val prTimeframe = getPrTimeframe()
+                val isConfigured = isIntervalsConfigured()
+                // Use per-ride mode if explicitly selected OR if intervals.icu is not configured (fallback)
+                val usePerRideMode = prTimeframe == PrTimeframe.PER_RIDE || !isConfigured
+
                 return DURATIONS.map { durationConfig ->
-                    val currentPower = powerBuffers[durationConfig.seconds]?.getBestAverage()?.toInt()
-                    val prPower = if (showPrComparison()) {
-                        powerCurveRepository.getPrForDuration(durationConfig.seconds)?.toInt()
-                    } else null
+                    val buffer = powerBuffers[durationConfig.seconds]
+                    val bestAverage = buffer?.getBestAverage()?.toInt()
+                    val currentRolling = buffer?.getCurrentAverage()?.toInt()
+
+                    // Determine what to show based on mode
+                    val (currentPower, referencePower) = if (usePerRideMode) {
+                        // Per Ride mode: show current rolling average vs current ride's best
+                        currentRolling to bestAverage
+                    } else {
+                        // PR mode: show current ride's best vs historical PR
+                        val historicalPr = if (showPrComparison()) {
+                            powerCurveRepository.getPrForDuration(durationConfig.seconds)?.toInt()
+                        } else null
+                        bestAverage to historicalPr
+                    }
 
                     val percentage = when {
-                        currentPower == null || prPower == null || prPower <= 0 -> 0f
-                        else -> currentPower.toFloat() / prPower.toFloat()
+                        currentPower == null || referencePower == null || referencePower <= 0 -> 0f
+                        else -> currentPower.toFloat() / referencePower.toFloat()
                     }
 
                     PowerBarData(
                         label = durationConfig.label,
                         durationSeconds = durationConfig.seconds,
                         currentPower = currentPower,
-                        prPower = prPower,
+                        prPower = referencePower,
                         percentage = percentage
                     )
                 }
