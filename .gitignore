@@ -1,0 +1,17 @@
+# Built files
+*.iml
+.gradle
+/local.properties
+/.idea
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# macOS
+.DS_Store
+
+# Claude Code
+.claude/

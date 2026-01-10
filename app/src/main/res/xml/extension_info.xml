@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExtensionInfo
+    displayName="@string/extension_name"
+    icon="@drawable/ic_power"
+    id="karoo-critical-power"
+    scansDevices="false">
+
+    <DataType
+        typeId="power-curve-overview"
+        displayName="@string/power_curve_overview"
+        description="@string/power_curve_overview_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-5s"
+        displayName="@string/best_power_5s"
+        description="@string/best_power_5s_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-15s"
+        displayName="@string/best_power_15s"
+        description="@string/best_power_15s_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-30s"
+        displayName="@string/best_power_30s"
+        description="@string/best_power_30s_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-1m"
+        displayName="@string/best_power_1m"
+        description="@string/best_power_1m_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-3m"
+        displayName="@string/best_power_3m"
+        description="@string/best_power_3m_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-5m"
+        displayName="@string/best_power_5m"
+        description="@string/best_power_5m_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-20m"
+        displayName="@string/best_power_20m"
+        description="@string/best_power_20m_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-30m"
+        displayName="@string/best_power_30m"
+        description="@string/best_power_30m_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-45m"
+        displayName="@string/best_power_45m"
+        description="@string/best_power_45m_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-1h"
+        displayName="@string/best_power_1h"
+        description="@string/best_power_1h_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+    <DataType
+        typeId="critical-power-1h30m"
+        displayName="@string/best_power_1h30m"
+        description="@string/best_power_1h30m_desc"
+        icon="@drawable/ic_power"
+        graphical="true" />
+
+</ExtensionInfo>

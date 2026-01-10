@@ -1,0 +1,52 @@
+<resources>
+    <string name="app_name">Critical Power</string>
+    <string name="extension_name">Critical Power</string>
+
+    <!-- 5 seconds -->
+    <string name="best_power_5s">5s Power</string>
+    <string name="best_power_5s_desc">Best 5-second average power this ride</string>
+
+    <!-- 15 seconds -->
+    <string name="best_power_15s">15s Power</string>
+    <string name="best_power_15s_desc">Best 15-second average power this ride</string>
+
+    <!-- 30 seconds -->
+    <string name="best_power_30s">30s Power</string>
+    <string name="best_power_30s_desc">Best 30-second average power this ride</string>
+
+    <!-- 1 minute -->
+    <string name="best_power_1m">1m Power</string>
+    <string name="best_power_1m_desc">Best 1-minute average power this ride</string>
+
+    <!-- 3 minutes -->
+    <string name="best_power_3m">3m Power</string>
+    <string name="best_power_3m_desc">Best 3-minute average power this ride</string>
+
+    <!-- 5 minutes -->
+    <string name="best_power_5m">5m Power</string>
+    <string name="best_power_5m_desc">Best 5-minute average power this ride</string>
+
+    <!-- 20 minutes -->
+    <string name="best_power_20m">20m Power</string>
+    <string name="best_power_20m_desc">Best 20-minute average power this ride</string>
+
+    <!-- 30 minutes -->
+    <string name="best_power_30m">30m Power</string>
+    <string name="best_power_30m_desc">Best 30-minute average power this ride</string>
+
+    <!-- 45 minutes -->
+    <string name="best_power_45m">45m Power</string>
+    <string name="best_power_45m_desc">Best 45-minute average power this ride</string>
+
+    <!-- 1 hour -->
+    <string name="best_power_1h">1h Power</string>
+    <string name="best_power_1h_desc">Best 1-hour average power this ride</string>
+
+    <!-- 1 hour 30 minutes -->
+    <string name="best_power_1h30m">90m Power</string>
+    <string name="best_power_1h30m_desc">Best 1.5-hour average power this ride</string>
+
+    <!-- Power curve overview -->
+    <string name="power_curve_overview">Critical Power</string>
+    <string name="power_curve_overview_desc">All best power durations with PR comparison bars</string>
+</resources>
