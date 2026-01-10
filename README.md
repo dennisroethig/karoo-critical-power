@@ -13,9 +13,9 @@ A Karoo 3 extension that displays "Critical Power" data fields for specific dura
 
 ## Screenshots
 
-| Overview Field | Single Data Field | Settings |
-|:-:|:-:|:-:|
-| ![Overview](screenshots/overview.png) | ![Single Field](screenshots/single-field.png) | ![Settings](screenshots/settings.png) |
+| Overview Field | Single Data Field |
+|:-:|:-:|
+| ![Overview](screenshots/all-times-active.png) | ![Single Field](screenshots/single-times-active.png) |
 
 ## Requirements
 
