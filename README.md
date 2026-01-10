@@ -11,6 +11,12 @@ A Karoo 3 extension that displays "Critical Power" data fields for specific dura
 - **PR Alerts** - Green highlighting when you're matching or beating a PR
 - **Offline Support** - PR data is cached, so it works even without connectivity
 
+## Screenshots
+
+| Overview Field | Single Data Field | Settings |
+|:-:|:-:|:-:|
+| ![Overview](screenshots/overview.png) | ![Single Field](screenshots/single-field.png) | ![Settings](screenshots/settings.png) |
+
 ## Requirements
 
 - Karoo 3 device
