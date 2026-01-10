@@ -25,33 +25,31 @@ A Karoo 3 extension that displays "Critical Power" data fields for specific dura
 
 ## Installation
 
-### Easy Install (Recommended)
+### Via Companion App (Recommended)
 
-1. **Download the APK** from the [latest release](https://github.com/dennisroethig/karoo-critical-power/releases/latest)
+1. **On your phone**, open the [latest release](https://github.com/dennisroethig/karoo-critical-power/releases/latest)
+2. **Long-press** the `app-debug.apk` link and select **Share**
+3. **Share to the Hammerhead Companion app**
+4. **Tap Install** on your Karoo when prompted
 
-2. **Install using one of these methods:**
+That's it! Updates can be installed the same way.
 
-   **Option A: Using Hammerhead's Web Installer**
-   - Visit [sdk.hammerhead.io/install-app](https://sdk.hammerhead.io/install-app) on your computer
-   - Connect your Karoo via USB and follow the on-screen instructions
-   - Select the downloaded APK file
+> Requires Karoo 3 with firmware 1.538+ and Companion App 1.36+
 
-   **Option B: Using a File Manager on Karoo**
-   - Connect your Karoo to your computer via USB
-   - Copy the APK file to your Karoo's `Downloads` folder
-   - On your Karoo, open a file manager app (you may need to install one first)
-   - Navigate to Downloads and tap the APK to install
+### Alternative: Using ADB
 
-   **Option C: Using ADB (for technical users)**
-   ```bash
-   adb install app-debug.apk
-   ```
+```bash
+adb install app-debug.apk
+```
 
-3. **Add data fields to your ride profile:**
-   - On your Karoo, go to **Profiles** > select your profile > **Data Pages**
-   - Edit a page and tap a field to change it
-   - Look for "Critical Power" fields under the extension category
-   - Choose individual durations (e.g., "5s Power", "20m Power") or "Critical Power" for the overview
+### Add Data Fields
+
+After installing, add the data fields to your ride profile:
+
+1. On your Karoo, go to **Profiles** > select your profile > **Data Pages**
+2. Edit a page and tap a field to change it
+3. Look for "Critical Power" fields under the extension category
+4. Choose individual durations (e.g., "5s Power", "20m Power") or "Critical Power" for the overview
 
 ## Configuration (Optional)
 
