@@ -1,12 +1,17 @@
 package io.hammerhead.karoocriticalpower.datatypes
 
 import io.hammerhead.karooext.KarooSystemService
+import io.hammerhead.karoocriticalpower.PowerBufferManager
 import io.hammerhead.karoocriticalpower.data.PowerCurveRepository
 import io.hammerhead.karoocriticalpower.data.PrTimeframe
 
+/**
+ * Best 1-hour average power data type.
+ */
 class CriticalPower1hDataType(
     extensionId: String,
     karooSystem: KarooSystemService,
+    bufferManager: PowerBufferManager,
     powerCurveRepository: PowerCurveRepository,
     showPrComparison: () -> Boolean,
     getPrTimeframe: () -> PrTimeframe,
@@ -16,6 +21,7 @@ class CriticalPower1hDataType(
     karooSystem = karooSystem,
     durationSeconds = 3600,
     typeIdSuffix = "1h",
+    bufferManager = bufferManager,
     powerCurveRepository = powerCurveRepository,
     showPrComparison = showPrComparison,
     getPrTimeframe = getPrTimeframe,

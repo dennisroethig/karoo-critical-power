@@ -3,15 +3,21 @@ package io.hammerhead.karoocriticalpower.extension
 import android.util.Log
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.KarooExtension
+import io.hammerhead.karooext.models.DataType
 import io.hammerhead.karooext.models.RideState
+import io.hammerhead.karooext.models.StreamState
+import io.hammerhead.karoocriticalpower.PowerBufferManager
 import io.hammerhead.karoocriticalpower.data.PowerCurveRepository
 import io.hammerhead.karoocriticalpower.data.CriticalPowerSettings
 import io.hammerhead.karoocriticalpower.data.PrTimeframe
 import io.hammerhead.karoocriticalpower.data.SettingsDataStore
 import io.hammerhead.karoocriticalpower.datatypes.*
+import io.hammerhead.karoocriticalpower.extensions.streamDataFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.launch
 
 class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0") {
@@ -23,7 +29,9 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
     private lateinit var karooSystem: KarooSystemService
     private lateinit var settingsDataStore: SettingsDataStore
     private lateinit var powerCurveRepository: PowerCurveRepository
+    private lateinit var bufferManager: PowerBufferManager
     private var serviceJob: Job? = null
+    private var powerStreamJob: Job? = null
     private var currentSettings: CriticalPowerSettings = CriticalPowerSettings()
     private var rideStateConsumerId: String? = null
 
@@ -36,24 +44,25 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
     // Callback to check if intervals.icu is configured
     private val isIntervalsConfigured: () -> Boolean = { currentSettings.isConfigured }
 
-    // All 11 individual data types
-    private val criticalPower5s by lazy { CriticalPower5sDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
-    private val criticalPower15s by lazy { CriticalPower15sDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
-    private val criticalPower30s by lazy { CriticalPower30sDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
-    private val criticalPower1m by lazy { CriticalPower1mDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
-    private val criticalPower3m by lazy { CriticalPower3mDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
-    private val criticalPower5m by lazy { CriticalPower5mDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
-    private val criticalPower20m by lazy { CriticalPower20mDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
-    private val criticalPower30m by lazy { CriticalPower30mDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
-    private val criticalPower45m by lazy { CriticalPower45mDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
-    private val criticalPower1h by lazy { CriticalPower1hDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
-    private val criticalPower1h30m by lazy { CriticalPower1h30mDataType(extension, karooSystem, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    // All 11 individual data types - using shared buffer manager
+    private val criticalPower5s by lazy { CriticalPower5sDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    private val criticalPower15s by lazy { CriticalPower15sDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    private val criticalPower30s by lazy { CriticalPower30sDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    private val criticalPower1m by lazy { CriticalPower1mDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    private val criticalPower3m by lazy { CriticalPower3mDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    private val criticalPower5m by lazy { CriticalPower5mDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    private val criticalPower20m by lazy { CriticalPower20mDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    private val criticalPower30m by lazy { CriticalPower30mDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    private val criticalPower45m by lazy { CriticalPower45mDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    private val criticalPower1h by lazy { CriticalPower1hDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
+    private val criticalPower1h30m by lazy { CriticalPower1h30mDataType(extension, karooSystem, bufferManager, powerCurveRepository, showPrComparison, getPrTimeframe, isIntervalsConfigured) }
 
-    // Power curve overview (all durations as bars)
+    // Power curve overview (all durations as bars) - using shared buffer manager
     private val powerCurveOverview by lazy {
         PowerCurveOverviewDataType(
             extension,
             karooSystem,
+            bufferManager,
             powerCurveRepository,
             showPrComparison,
             getPrTimeframe,
@@ -66,23 +75,23 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
         karooSystem = KarooSystemService(applicationContext)
         settingsDataStore = SettingsDataStore(applicationContext)
         powerCurveRepository = PowerCurveRepository(applicationContext)
+        bufferManager = PowerBufferManager(applicationContext)
 
         serviceJob = CoroutineScope(Dispatchers.IO).launch {
             karooSystem.connect { connected ->
                 Log.d(TAG, "Karoo system connected: $connected")
             }
 
-            // Listen for ride state changes to fetch fresh PR data at ride start
+            // Listen for ride state changes
             rideStateConsumerId = karooSystem.addConsumer { rideState: RideState ->
                 when (rideState) {
                     is RideState.Recording -> {
-                        Log.d(TAG, "Ride started - fetching fresh PR data and resetting buffers")
-                        // Reset all power buffers for the new ride
-                        types.filterIsInstance<CriticalPowerDataType>().forEach { it.reset() }
-                        powerCurveOverview.reset()
-                        // Fetch fresh PR data if configured
-                        if (currentSettings.isConfigured) {
-                            CoroutineScope(Dispatchers.IO).launch {
+                        Log.d(TAG, "Ride recording state detected")
+                        // Reset buffers for new ride (with guard logic in buffer manager)
+                        CoroutineScope(Dispatchers.IO).launch {
+                            bufferManager.resetForNewRide()
+                            // Fetch fresh PR data if configured
+                            if (currentSettings.isConfigured) {
                                 fetchPowerCurve()
                             }
                         }
@@ -95,6 +104,9 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
                     }
                 }
             }
+
+            // Start power stream - this is the SINGLE place where samples are added
+            startPowerStream()
 
             // Load settings and observe changes
             settingsDataStore.settings.collect { settings ->
@@ -111,6 +123,27 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
         Log.d(TAG, "KarooCriticalPowerExtension created")
     }
 
+    /**
+     * Start the power data stream.
+     * This is the ONLY place where power samples are added to the buffer manager.
+     */
+    private fun startPowerStream() {
+        powerStreamJob = CoroutineScope(Dispatchers.IO).launch {
+            Log.d(TAG, "Starting power stream for buffer manager")
+            karooSystem.streamDataFlow(DataType.Type.POWER)
+                .filterIsInstance<StreamState.Streaming>()
+                .catch { e ->
+                    Log.e(TAG, "Error in power stream", e)
+                }
+                .collect { state ->
+                    val watts = state.dataPoint.singleValue
+                    if (watts != null && watts >= 0) {
+                        bufferManager.addSample(watts)
+                    }
+                }
+        }
+    }
+
     private suspend fun fetchPowerCurve() {
         Log.d(TAG, "Fetching power curve from intervals.icu")
         val success = powerCurveRepository.fetchPowerCurve(currentSettings)
@@ -122,6 +155,12 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
     }
 
     override fun onDestroy() {
+        // Persist buffer state before destroying
+        CoroutineScope(Dispatchers.IO).launch {
+            bufferManager.onServiceDestroy()
+        }
+
+        powerStreamJob?.cancel()
         serviceJob?.cancel()
         rideStateConsumerId?.let { karooSystem.removeConsumer(it) }
         karooSystem.disconnect()

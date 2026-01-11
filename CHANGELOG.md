@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2025-01-11
+
+### Fixed
+
+- **Double-sampling bug** - Values were appearing at half the expected time (e.g., 30m power showing after 15 minutes). Root cause: both stream and view were adding samples to the buffer, counting each sample twice.
+- **Values disappearing mid-ride** - On long rides (60-70+ min), power values would reset to "--". Fixed with persistence and smart reset guards.
+
+### Changed
+
+- **Centralized buffer management** - New `PowerBufferManager` provides single source of truth for all power data
+- **Reduced memory usage** - Shared buffers between individual data types and overview (from 22 buffers down to 11)
+- **Thread-safe access** - Mutex protection for buffer operations
+- **State persistence** - Best average values are now saved to DataStore and restored on service restart
+- **Smart reset guards** - Prevents accidental mid-ride buffer resets from spurious ride state events
+
+### Added
+
+- **Diagnostic logging** - Events logged to file for post-ride analysis (`power_buffer_diagnostics.log`)
+- **CLAUDE.md** - Build and deploy instructions for development
+
 ## [1.1.0] - 2025-01-10
 
 ### Added

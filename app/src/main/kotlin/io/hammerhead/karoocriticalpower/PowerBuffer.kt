@@ -67,4 +67,14 @@ class PowerBuffer(
      * Check if the buffer has enough samples to calculate an average.
      */
     fun isReady(): Boolean = count >= bufferSize
+
+    /**
+     * Restore a previously persisted best average.
+     * Used when recovering from service restart.
+     */
+    fun restoreBestAverage(value: Double) {
+        if (value > bestAverage) {
+            bestAverage = value
+        }
+    }
 }

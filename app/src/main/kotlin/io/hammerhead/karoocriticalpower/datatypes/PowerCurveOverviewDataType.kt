@@ -11,21 +11,18 @@ import io.hammerhead.karooext.extension.DataTypeImpl
 import io.hammerhead.karooext.internal.Emitter
 import io.hammerhead.karooext.internal.ViewEmitter
 import io.hammerhead.karooext.models.DataPoint
-import io.hammerhead.karooext.models.DataType
 import io.hammerhead.karooext.models.StreamState
 import io.hammerhead.karooext.models.ViewConfig
-import io.hammerhead.karoocriticalpower.PowerBuffer
+import io.hammerhead.karoocriticalpower.PowerBufferManager
 import io.hammerhead.karoocriticalpower.data.PowerCurveRepository
 import io.hammerhead.karoocriticalpower.data.PrTimeframe
-import io.hammerhead.karoocriticalpower.extensions.streamDataFlow
 import io.hammerhead.karoocriticalpower.views.PowerBarData
 import io.hammerhead.karoocriticalpower.views.PowerBarsView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 
@@ -43,6 +40,7 @@ data class DurationConfig(
 class PowerCurveOverviewDataType(
     extensionId: String,
     private val karooSystem: KarooSystemService,
+    private val bufferManager: PowerBufferManager,
     private val powerCurveRepository: PowerCurveRepository,
     private val showPrComparison: () -> Boolean,
     private val getPrTimeframe: () -> PrTimeframe,
@@ -67,11 +65,6 @@ class PowerCurveOverviewDataType(
         )
     }
 
-    // Create a PowerBuffer for each duration
-    private val powerBuffers: Map<Int, PowerBuffer> = DURATIONS.associate { config ->
-        config.seconds to PowerBuffer(config.seconds)
-    }
-
     private var streamJob: Job? = null
     private var viewJob: Job? = null
 
@@ -83,41 +76,39 @@ class PowerCurveOverviewDataType(
 
         val scope = CoroutineScope(Dispatchers.IO)
         streamJob = scope.launch {
-            karooSystem.streamDataFlow(DataType.Type.POWER)
-                .filterIsInstance<StreamState.Streaming>()
-                .catch { e ->
-                    Log.e(TAG, "Error streaming power data", e)
-                    emitter.onNext(StreamState.NotAvailable)
-                }
-                .collect { state ->
-                    val watts = state.dataPoint.singleValue
-                    if (watts != null && watts >= 0) {
-                        // Feed all buffers with the power sample
-                        powerBuffers.values.forEach { buffer ->
-                            buffer.addSample(watts)
-                        }
+            // Poll the buffer manager for updates
+            // The extension handles adding samples, we just read
+            while (true) {
+                try {
+                    // Check if at least the shortest duration has data
+                    val shortestBest = bufferManager.getBestAverage(DURATIONS.first().seconds)
 
-                        // Check if at least the shortest duration has data
-                        val shortestBuffer = powerBuffers[DURATIONS.first().seconds]
-                        if (shortestBuffer?.getBestAverage() != null) {
-                            // Build data fields for the stream
-                            val dataFields = mutableMapOf<String, Double>()
-                            DURATIONS.forEach { config ->
-                                powerBuffers[config.seconds]?.getBestAverage()?.let { best ->
-                                    dataFields["best_${config.seconds}"] = best
-                                }
+                    if (shortestBest != null) {
+                        // Build data fields for the stream
+                        val dataFields = mutableMapOf<String, Double>()
+                        for (config in DURATIONS) {
+                            bufferManager.getBestAverage(config.seconds)?.let { best ->
+                                dataFields["best_${config.seconds}"] = best
                             }
-
-                            emitter.onNext(
-                                StreamState.Streaming(
-                                    DataPoint(dataTypeId, dataFields)
-                                )
-                            )
-                        } else {
-                            emitter.onNext(StreamState.Searching)
                         }
+
+                        emitter.onNext(
+                            StreamState.Streaming(
+                                DataPoint(dataTypeId, dataFields)
+                            )
+                        )
+                    } else {
+                        emitter.onNext(StreamState.Searching)
                     }
+
+                    // Update at 1Hz
+                    delay(1000)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in stream loop", e)
+                    emitter.onNext(StreamState.NotAvailable)
+                    delay(1000)
                 }
+            }
         }
 
         emitter.setCancellable {
@@ -141,16 +132,15 @@ class PowerCurveOverviewDataType(
         val scope = CoroutineScope(Dispatchers.Main)
         viewJob = scope.launch {
             // Helper to build bar data from current state
-            fun buildBars(): List<PowerBarData> {
+            suspend fun buildBars(): List<PowerBarData> {
                 val prTimeframe = getPrTimeframe()
                 val isConfigured = isIntervalsConfigured()
                 // Use per-ride mode if explicitly selected OR if intervals.icu is not configured (fallback)
                 val usePerRideMode = prTimeframe == PrTimeframe.PER_RIDE || !isConfigured
 
                 return DURATIONS.map { durationConfig ->
-                    val buffer = powerBuffers[durationConfig.seconds]
-                    val bestAverage = buffer?.getBestAverage()?.toInt()
-                    val currentRolling = buffer?.getCurrentAverage()?.toInt()
+                    val bestAverage = bufferManager.getBestAverage(durationConfig.seconds)?.toInt()
+                    val currentRolling = bufferManager.getCurrentAverage(durationConfig.seconds)?.toInt()
 
                     // Determine what to show based on mode
                     val (currentPower, referencePower) = if (usePerRideMode) {
@@ -208,23 +198,17 @@ class PowerCurveOverviewDataType(
                     }
             }
 
-            // Collect power data updates and re-render
-            karooSystem.streamDataFlow(DataType.Type.POWER)
-                .filterIsInstance<StreamState.Streaming>()
-                .catch { e ->
-                    Log.e(TAG, "Error in view stream", e)
+            // Poll buffer manager for updates (no adding samples - just reading)
+            while (true) {
+                try {
+                    renderView()
+                    // Update at 1Hz
+                    delay(1000)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in view loop", e)
+                    delay(1000)
                 }
-                .collect { state ->
-                    val watts = state.dataPoint.singleValue
-                    if (watts != null && watts >= 0) {
-                        // Update all buffers
-                        powerBuffers.values.forEach { buffer ->
-                            buffer.addSample(watts)
-                        }
-                        // Re-render with updated data
-                        renderView()
-                    }
-                }
+            }
         }
 
         emitter.setCancellable {
@@ -232,12 +216,5 @@ class PowerCurveOverviewDataType(
             viewJob?.cancel()
             viewJob = null
         }
-    }
-
-    /**
-     * Reset all power buffers (call at start of new ride).
-     */
-    fun reset() {
-        powerBuffers.values.forEach { it.reset() }
     }
 }

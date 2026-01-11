@@ -1,12 +1,17 @@
 package io.hammerhead.karoocriticalpower.datatypes
 
 import io.hammerhead.karooext.KarooSystemService
+import io.hammerhead.karoocriticalpower.PowerBufferManager
 import io.hammerhead.karoocriticalpower.data.PowerCurveRepository
 import io.hammerhead.karoocriticalpower.data.PrTimeframe
 
+/**
+ * Best 45-minute average power data type.
+ */
 class CriticalPower45mDataType(
     extensionId: String,
     karooSystem: KarooSystemService,
+    bufferManager: PowerBufferManager,
     powerCurveRepository: PowerCurveRepository,
     showPrComparison: () -> Boolean,
     getPrTimeframe: () -> PrTimeframe,
@@ -16,6 +21,7 @@ class CriticalPower45mDataType(
     karooSystem = karooSystem,
     durationSeconds = 2700,
     typeIdSuffix = "45m",
+    bufferManager = bufferManager,
     powerCurveRepository = powerCurveRepository,
     showPrComparison = showPrComparison,
     getPrTimeframe = getPrTimeframe,
