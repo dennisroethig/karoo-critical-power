@@ -63,3 +63,45 @@ adb shell cat /data/data/io.hammerhead.karoocriticalpower/files/power_buffer_dia
 - **Java not found**: Ensure JDK 17+ is installed and JAVA_HOME is set
 - **GitHub packages auth**: Need `gpr.user` and `gpr.key` in `~/.gradle/gradle.properties`
 - **ADB not found**: Ensure Android SDK platform-tools is in PATH
+
+## Release Process (MANDATORY)
+
+**IMPORTANT: When making changes that warrant a version bump, ALL of these steps MUST be completed:**
+
+### 1. Update Version
+Edit `app/build.gradle.kts`:
+- Increment `versionCode` (integer, always +1)
+- Update `versionName` (semantic versioning: major.minor.patch)
+
+### 2. Update Changelog
+Edit `CHANGELOG.md`:
+- Add new version section at the top with date: `## [X.Y.Z] - YYYY-MM-DD`
+- Document all changes under appropriate headers (Added, Changed, Fixed, Removed)
+
+### 3. Commit Changes
+```bash
+git add -A && git commit -m "Release vX.Y.Z - Brief description"
+git push
+```
+
+### 4. Build Release APK
+```bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk@17" && ./gradlew assembleRelease
+```
+
+### 5. Create GitHub Release
+```bash
+gh release create vX.Y.Z \
+  --title "vX.Y.Z - Brief Title" \
+  --notes "$(cat <<'EOF'
+## Changes
+
+- List key changes here (copy from CHANGELOG.md)
+
+See [CHANGELOG.md](CHANGELOG.md) for full details.
+EOF
+)" \
+  app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
+**NEVER skip creating the GitHub release after bumping the version!**
