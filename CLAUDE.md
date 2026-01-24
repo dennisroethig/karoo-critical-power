@@ -22,8 +22,10 @@ Output: `app/build/outputs/apk/debug/app-debug.apk`
 
 ### Build + Deploy in one command
 ```bash
-export JAVA_HOME="/opt/homebrew/opt/openjdk@17" && ./gradlew assembleDebug && ~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
+export JAVA_HOME="/opt/homebrew/opt/openjdk@17" && ./gradlew clean assembleDebug && ~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+**IMPORTANT: Always use `clean` before building to ensure a fresh APK with the current version.**
 
 ## Project Structure
 
@@ -86,8 +88,10 @@ git push
 
 ### 4. Build Release APK
 ```bash
-export JAVA_HOME="/opt/homebrew/opt/openjdk@17" && ./gradlew assembleRelease
+export JAVA_HOME="/opt/homebrew/opt/openjdk@17" && ./gradlew clean assembleRelease assembleDebug
 ```
+
+**Note: Builds both release (for GitHub) and debug (for ADB deploy) from clean state.**
 
 ### 5. Create GitHub Release
 ```bash
@@ -102,6 +106,11 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 EOF
 )" \
   app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
+### 6. Deploy to Karoo (if connected)
+```bash
+~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 **NEVER skip creating the GitHub release after bumping the version!**
