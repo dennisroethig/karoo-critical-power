@@ -40,6 +40,7 @@ class PowerBufferManager(private val context: Context) {
         private fun bestAverageKey(duration: Int) = doublePreferencesKey("best_avg_$duration")
         private val RIDE_START_TIME_KEY = longPreferencesKey("ride_start_time")
         private val LAST_SAMPLE_TIME_KEY = longPreferencesKey("last_sample_time")
+        private val SAMPLE_COUNT_KEY = longPreferencesKey("sample_count")
     }
 
     // Single set of buffers for all durations
@@ -52,6 +53,10 @@ class PowerBufferManager(private val context: Context) {
     private var rideStartTime: Long = 0L
     private var lastSampleTime: Long = 0L
     private var sampleCount: Long = 0L
+
+    // Flag to prevent resets before persisted state is loaded
+    @Volatile
+    private var stateLoaded: Boolean = false
 
     // Diagnostic log file
     private val logFile: File by lazy {
@@ -142,13 +147,18 @@ class PowerBufferManager(private val context: Context) {
             val rideElapsed = now - rideStartTime
 
             // Guard: Don't reset if we have recent data and significant ride time
+            // Block reset if persisted state hasn't loaded yet (race condition on service restart)
+            if (!stateLoaded && !force) {
+                logDiagnostic("RESET_DEFERRED: State not yet loaded, blocking reset")
+                Log.w(TAG, "Blocking reset - persisted state not yet loaded")
+                return@withLock
+            }
+
             // Allow reset if:
             // - force is true (explicit user action)
             // - No samples in last 5 minutes (ride probably ended)
             // - Less than 60 seconds of ride time (just started)
-            // - Never received any samples
             val shouldReset = force ||
-                sampleCount == 0L ||
                 timeSinceLastSample > 5 * 60 * 1000 ||
                 rideElapsed < 60 * 1000
 
@@ -190,6 +200,7 @@ class PowerBufferManager(private val context: Context) {
                 }
                 prefs[RIDE_START_TIME_KEY] = rideStartTime
                 prefs[LAST_SAMPLE_TIME_KEY] = lastSampleTime
+                prefs[SAMPLE_COUNT_KEY] = sampleCount
             }
             Log.d(TAG, "Persisted best values to DataStore")
         } catch (e: Exception) {
@@ -204,6 +215,7 @@ class PowerBufferManager(private val context: Context) {
 
             rideStartTime = prefs[RIDE_START_TIME_KEY] ?: 0L
             lastSampleTime = prefs[LAST_SAMPLE_TIME_KEY] ?: 0L
+            sampleCount = prefs[SAMPLE_COUNT_KEY] ?: 0L
 
             // Check if persisted state is still valid (ride not too old)
             val now = System.currentTimeMillis()
@@ -226,6 +238,10 @@ class PowerBufferManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load persisted state", e)
             logDiagnostic("LOAD_ERROR: ${e.message}")
+        } finally {
+            // Mark state as loaded (even on error) so reset guard can function
+            stateLoaded = true
+            logDiagnostic("STATE_LOAD_COMPLETE: stateLoaded=true")
         }
     }
 

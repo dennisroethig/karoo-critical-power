@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2025-01-24
+
+### Fixed
+
+- **Power values disappearing on long rides** - Two race conditions on service restart:
+  1. `sampleCount` was not persisted, causing reset guard to fail
+  2. Reset could trigger before persisted state finished loading
+
+  Now `sampleCount` is persisted, and resets are blocked until state loading completes.
+
 ## [1.2.0] - 2025-01-11
 
 ### Fixed
