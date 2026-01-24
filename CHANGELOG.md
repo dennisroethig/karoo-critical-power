@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2025-01-24
+
+### Added
+
+- **Version display in settings** - App version now shown at the bottom of the settings screen
+
 ## [1.2.1] - 2025-01-24
 
 ### Fixed
