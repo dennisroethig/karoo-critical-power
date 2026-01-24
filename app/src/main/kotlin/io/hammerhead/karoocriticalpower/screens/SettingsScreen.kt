@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import io.hammerhead.karoocriticalpower.BuildConfig
 import io.hammerhead.karoocriticalpower.data.ApiError
 import io.hammerhead.karoocriticalpower.data.PowerCurveRepository
 import io.hammerhead.karoocriticalpower.data.CriticalPowerSettings
@@ -272,6 +273,14 @@ fun SettingsScreen(
                 lastFetchTime = lastFetchTime,
                 isFromCache = isFromCache,
                 prCount = powerCurve?.durationToWatts?.size ?: 0
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Version ${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
