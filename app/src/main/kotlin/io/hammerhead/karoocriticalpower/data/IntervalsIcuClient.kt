@@ -63,12 +63,14 @@ class IntervalsIcuClient(
 
         // Durations we care about (in seconds)
         val TARGET_DURATIONS = listOf(5, 15, 30, 60, 180, 300, 1200, 1800, 2700, 3600, 5400)
+
+        private val httpClient = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private val client get() = httpClient
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -88,25 +90,25 @@ class IntervalsIcuClient(
                 .get()
                 .build()
 
-            val response = client.newCall(request).execute()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "API request failed: ${response.code} ${response.message}")
+                    return@withContext ApiResult.Failure(categorizeHttpError(response.code, response.message))
+                }
 
-            if (!response.isSuccessful) {
-                Log.e(TAG, "API request failed: ${response.code} ${response.message}")
-                return@withContext ApiResult.Failure(categorizeHttpError(response.code, response.message))
-            }
+                val body = response.body?.string()
+                if (body == null) {
+                    Log.e(TAG, "Empty response body")
+                    return@withContext ApiResult.Failure(ApiError.ParseError("Empty response from server"))
+                }
 
-            val body = response.body?.string()
-            if (body == null) {
-                Log.e(TAG, "Empty response body")
-                return@withContext ApiResult.Failure(ApiError.ParseError("Empty response from server"))
-            }
-
-            Log.d(TAG, "Response body (first 500 chars): ${body.take(500)}")
-            val data = parsePowerCurveResponse(body)
-            if (data != null) {
-                ApiResult.Success(data)
-            } else {
-                ApiResult.Failure(ApiError.ParseError("Could not parse power curve data"))
+                Log.d(TAG, "Response body (first 500 chars): ${body.take(500)}")
+                val data = parsePowerCurveResponse(body)
+                if (data != null) {
+                    ApiResult.Success(data)
+                } else {
+                    ApiResult.Failure(ApiError.ParseError("Could not parse power curve data"))
+                }
             }
         } catch (e: UnknownHostException) {
             Log.e(TAG, "Network error: ${e.message}")

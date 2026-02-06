@@ -147,6 +147,11 @@ class PowerCurveRepository(private val context: Context) {
             return false
         }
 
+        if (settings.prTimeframe == PrTimeframe.PER_RIDE) {
+            Log.d(TAG, "Per-ride mode, skipping API fetch")
+            return false
+        }
+
         if (_isLoading.value) {
             Log.d(TAG, "Already fetching, skipping")
             return false
