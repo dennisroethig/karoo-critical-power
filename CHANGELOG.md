@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-03-28
+
+### Fixed
+
+- **Installation failing on Karoo** - Release APK was unsigned, causing install to fail when sideloading via the Companion App. Release builds are now properly signed.
+
+### Changed
+
+- **Updated Karoo SDK** - Bumped karoo-ext from 1.1.3 to 1.1.9, bringing compatibility with the latest Karoo firmware
+
 ## [1.2.2] - 2025-01-24
 
 ### Added

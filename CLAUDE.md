@@ -105,7 +105,7 @@ gh release create vX.Y.Z \
 See [CHANGELOG.md](CHANGELOG.md) for full details.
 EOF
 )" \
-  app/build/outputs/apk/release/app-release-unsigned.apk
+  app/build/outputs/apk/release/app-release.apk
 ```
 
 ### 6. Deploy to Karoo (if connected)

@@ -13,5 +13,8 @@ local.properties
 # macOS
 .DS_Store
 
+# Keystore
+*.keystore
+
 # Claude Code
 .claude/
