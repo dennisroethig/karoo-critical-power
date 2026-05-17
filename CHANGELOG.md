@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-05-18
+
+### Fixed
+
+- **Unreadable text in dark mode** - Duration labels on the left of the overview bars (5s, 15s, 1m, …) and the main power value on individual critical-power data fields were hardcoded to black, rendering invisibly on the Karoo's dark background in dark mode. Text colors now use day/night-aware color resources so they switch to white automatically. Bar fill colors and the values inside the colored bars are unchanged.
+
 ## [1.3.0] - 2026-03-28
 
 ### Fixed

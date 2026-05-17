@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="power_bar_label">#000000</color>
+    <color name="power_value_primary">#000000</color>
+    <color name="power_value_pr_secondary">#757575</color>
+</resources>

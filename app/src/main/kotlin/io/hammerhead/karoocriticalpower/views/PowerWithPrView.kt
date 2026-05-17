@@ -18,6 +18,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import io.hammerhead.karooext.models.ViewConfig
+import io.hammerhead.karoocriticalpower.R
 
 /**
  * Glance composable that displays power with optional PR comparison.
@@ -30,11 +31,12 @@ fun PowerWithPrView(
     pr: Int?,
     dataAlignment: ViewConfig.Alignment
 ) {
-    // Determine text color - green if beating PR, black otherwise
+    // Determine text color - green if beating PR, day/night-aware primary otherwise.
+    // Uses a color resource so the value stays readable on the Karoo's dark background.
     val textColor = if (power != null && pr != null && power >= pr) {
         ColorProvider(Color(0xFF2E7D32)) // Darker green when beating PR
     } else {
-        ColorProvider(Color.Black) // Black otherwise
+        ColorProvider(R.color.power_value_primary)
     }
 
     Box(
@@ -72,7 +74,7 @@ fun PowerWithPrView(
                 val prColor = if (power != null && power >= pr) {
                     ColorProvider(Color(0xFF4CAF50)) // Green when beating PR
                 } else {
-                    ColorProvider(Color(0xFF757575)) // Gray otherwise
+                    ColorProvider(R.color.power_value_pr_secondary)
                 }
 
                 Text(

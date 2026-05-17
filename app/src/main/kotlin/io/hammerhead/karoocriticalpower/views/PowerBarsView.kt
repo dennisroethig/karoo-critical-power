@@ -21,6 +21,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import io.hammerhead.karoocriticalpower.R
 
 /**
  * Data class representing a single power bar's state.
@@ -149,10 +150,13 @@ private fun PowerBarRow(bar: PowerBarData, barAreaWidthDp: Int) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Duration label (fixed width)
+        // Uses a day/night color resource because this label sits directly on the
+        // Karoo screen background, not on a bar fill — black would be unreadable
+        // on dark mode's dark background.
         Text(
             text = bar.label,
             style = TextStyle(
-                color = ColorProvider(BarColors.textColor),
+                color = ColorProvider(R.color.power_bar_label),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             ),
