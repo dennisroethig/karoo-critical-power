@@ -24,6 +24,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -31,7 +32,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.hammerhead.karoocriticalpower.BuildConfig
 import io.hammerhead.karoocriticalpower.data.ApiError
 import io.hammerhead.karoocriticalpower.data.PowerCurveRepository
@@ -58,19 +59,23 @@ fun SettingsScreen(
     onTestConnection: (suspend (String, String) -> Pair<Boolean, String?>)? = null,
     onClose: () -> Unit = {}
 ) {
-    val settings by settingsDataStore.settings.collectAsState(initial = CriticalPowerSettings())
+    val settings by settingsDataStore.settings.collectAsStateWithLifecycle(initialValue = CriticalPowerSettings())
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
     // Repository state
-    val isLoading by powerCurveRepository?.isLoading?.collectAsState() ?: remember { mutableStateOf(false) }
-    val lastError by powerCurveRepository?.lastError?.collectAsState() ?: remember { mutableStateOf<ApiError?>(null) }
-    val lastFetchTime by powerCurveRepository?.lastFetchTime?.collectAsState() ?: remember { mutableStateOf<Long?>(null) }
-    val isFromCache by powerCurveRepository?.isFromCache?.collectAsState() ?: remember { mutableStateOf(false) }
-    val powerCurve by powerCurveRepository?.powerCurve?.collectAsState() ?: remember { mutableStateOf(null) }
+    val isLoading by powerCurveRepository?.isLoading?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(false) }
+    val lastError by powerCurveRepository?.lastError?.collectAsStateWithLifecycle() ?: remember { mutableStateOf<ApiError?>(null) }
+    val lastFetchTime by powerCurveRepository?.lastFetchTime?.collectAsStateWithLifecycle() ?: remember { mutableStateOf<Long?>(null) }
+    val isFromCache by powerCurveRepository?.isFromCache?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(false) }
+    val powerCurve by powerCurveRepository?.powerCurve?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(null) }
 
-    var apiKey by remember(settings.intervalsApiKey) { mutableStateOf(settings.intervalsApiKey) }
-    var athleteId by remember(settings.intervalsAthleteId) { mutableStateOf(settings.intervalsAthleteId) }
+    // Field edits overlay the stored values, so a late DataStore emission
+    // can't wipe text the user has already typed
+    var apiKeyEdit by remember { mutableStateOf<String?>(null) }
+    var athleteIdEdit by remember { mutableStateOf<String?>(null) }
+    val apiKey = apiKeyEdit ?: settings.intervalsApiKey
+    val athleteId = athleteIdEdit ?: settings.intervalsAthleteId
     var timeframeExpanded by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var isTesting by remember { mutableStateOf(false) }
@@ -113,7 +118,7 @@ fun SettingsScreen(
 
             OutlinedTextField(
                 value = apiKey,
-                onValueChange = { apiKey = it },
+                onValueChange = { apiKeyEdit = it },
                 label = { Text("API Key") },
                 placeholder = { Text("Your intervals.icu API key") },
                 visualTransformation = PasswordVisualTransformation(),
@@ -134,7 +139,7 @@ fun SettingsScreen(
 
             OutlinedTextField(
                 value = athleteId,
-                onValueChange = { athleteId = it },
+                onValueChange = { athleteIdEdit = it },
                 label = { Text("Athlete ID") },
                 placeholder = { Text("i12345") },
                 singleLine = true,
@@ -165,7 +170,7 @@ fun SettingsScreen(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = timeframeExpanded) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                 )
 
                 ExposedDropdownMenu(
@@ -217,12 +222,16 @@ fun SettingsScreen(
                         scope.launch {
                             settingsDataStore.updateSettings(
                                 settings.copy(
-                                    intervalsApiKey = apiKey,
-                                    intervalsAthleteId = athleteId
+                                    intervalsApiKey = apiKey.trim(),
+                                    intervalsAthleteId = athleteId.trim()
                                 )
                             )
+                            // Fields now reflect the stored values again
+                            apiKeyEdit = null
+                            athleteIdEdit = null
                         }
                     },
+                    enabled = apiKeyError == null && athleteIdError == null,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Save")
@@ -234,11 +243,11 @@ fun SettingsScreen(
                             scope.launch {
                                 isTesting = true
                                 testResult = null
-                                val (success, errorMsg) = onTestConnection(apiKey, athleteId)
-                                testResult = if (success) {
-                                    "Connection successful!"
-                                } else {
-                                    errorMsg ?: "Connection failed"
+                                val (success, message) = onTestConnection(apiKey.trim(), athleteId.trim())
+                                testResult = when {
+                                    success && message != null -> "Connection successful — $message"
+                                    success -> "Connection successful!"
+                                    else -> message ?: "Connection failed"
                                 }
                                 isTesting = false
                             }

@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-08-19
+
+### Fixed
+
+- **"Could not parse power curve data" for valid accounts** - An athlete with no rides in the selected timeframe (new account, off-season window) was reported as a parse error by the Test button. A valid-but-empty power curve is now treated as success, and Test Connection says so explicitly.
+- **Settings screen not reflecting the extension's fetches** - The settings screen and the ride extension each had their own repository state, so "Last updated" and errors in the Status section could be stale. Both now share one instance.
+- **Typed text wiped in the settings fields** - Text entered in the first moments after opening settings could be discarded when the stored values finished loading.
+- **Save accepting invalid input** - The Save button is now disabled while the API key or athlete ID fails validation, and inputs are trimmed; the athlete ID is URL-encoded in API requests.
+- **Time jumps confusing gap detection** - Sample-gap detection now uses the monotonic clock, so a GPS time sync can no longer cause spurious zero-filling or missed gaps.
+
+### Changed
+
+- **Failed power curve fetches now retry** - A network failure at ride start (no WiFi in the garage) retries every 5 minutes up to 6 times instead of silently leaving you without PRs; non-network errors (bad credentials) do not retry.
+- **Fetch skipped when the cache is fresh** - At service start the power curve is only fetched if the cached copy is older than 24 hours.
+- **Backups disabled** (`allowBackup="false"`) so the intervals.icu API key never leaves the device via ADB or cloud backup.
+- **minSdk raised 23 → 26** to match the `java.time` APIs already in use; all Karoo hardware is API 26+. Build toolchain moved from Java 8 to Java 17 targets.
+- Debug-level request/response logging no longer runs in release builds.
+
 ## [1.4.0] - 2026-08-19
 
 ### Fixed

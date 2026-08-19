@@ -10,7 +10,7 @@ import io.hammerhead.karoocriticalpower.theme.AppTheme
 
 class MainActivity : ComponentActivity() {
     private val settingsDataStore by lazy { SettingsDataStore(applicationContext) }
-    private val powerCurveRepository by lazy { PowerCurveRepository(applicationContext) }
+    private val powerCurveRepository by lazy { PowerCurveRepository.getInstance(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

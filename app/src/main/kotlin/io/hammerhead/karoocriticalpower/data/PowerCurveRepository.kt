@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,13 +24,24 @@ private val Context.powerCurveDataStore: DataStore<Preferences> by preferencesDa
 /**
  * Repository for managing power curve (PR) data from intervals.icu.
  * Caches data to device storage so PRs are available even without internet.
+ *
+ * Process-wide singleton so the settings screen and the extension service
+ * observe the same in-memory state (fetch status, errors, last-updated).
  */
-class PowerCurveRepository(private val context: Context) {
+class PowerCurveRepository private constructor(private val context: Context) {
 
     companion object {
         private const val TAG = "PowerCurveRepository"
         private val KEY_POWER_CURVE_JSON = stringPreferencesKey("power_curve_json")
         private val KEY_LAST_FETCH_TIME = longPreferencesKey("last_fetch_time")
+
+        @Volatile
+        private var instance: PowerCurveRepository? = null
+
+        fun getInstance(context: Context): PowerCurveRepository =
+            instance ?: synchronized(this) {
+                instance ?: PowerCurveRepository(context.applicationContext).also { instance = it }
+            }
     }
 
     private val _powerCurve = MutableStateFlow<PowerCurveData?>(null)
@@ -48,6 +60,10 @@ class PowerCurveRepository(private val context: Context) {
     val isFromCache: StateFlow<Boolean> = _isFromCache.asStateFlow()
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    // Completed once the cached curve has been loaded (or load failed);
+    // fetches wait on this so a slow cache load can't overwrite fresh data
+    private val cacheLoaded = CompletableDeferred<Unit>()
 
     init {
         // Load cached data on init
@@ -76,6 +92,8 @@ class PowerCurveRepository(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading cached data: ${e.message}")
+        } finally {
+            cacheLoaded.complete(Unit)
         }
     }
 
@@ -105,7 +123,25 @@ class PowerCurveRepository(private val context: Context) {
      * Fetch power curve data using the provided settings.
      * On success, caches the data for offline use.
      */
+    /**
+     * Fetch only if there is no usable data yet or the cache is older than [maxAgeMs].
+     * Used at service start so a fresh boot with a recent cache doesn't hit the network.
+     */
+    suspend fun fetchIfStale(settings: CriticalPowerSettings, maxAgeMs: Long): Boolean {
+        cacheLoaded.await()
+        val fetchedAt = _lastFetchTime.value
+        val isFresh = _powerCurve.value != null &&
+            fetchedAt != null &&
+            System.currentTimeMillis() - fetchedAt < maxAgeMs
+        if (isFresh) {
+            Log.d(TAG, "Cache is fresh, skipping fetch")
+            return true
+        }
+        return fetchPowerCurve(settings)
+    }
+
     suspend fun fetchPowerCurve(settings: CriticalPowerSettings): Boolean {
+        cacheLoaded.await()
         if (!settings.isConfigured) {
             Log.d(TAG, "Settings not configured, skipping fetch")
             return false
@@ -169,7 +205,12 @@ class PowerCurveRepository(private val context: Context) {
         return try {
             val client = IntervalsIcuClient(apiKey = apiKey, athleteId = athleteId)
             when (val result = client.fetchPowerCurve(null)) {
-                is ApiResult.Success -> Pair(true, null)
+                is ApiResult.Success ->
+                    if (result.data.durationToWatts.isEmpty()) {
+                        Pair(true, "no power data on intervals.icu yet")
+                    } else {
+                        Pair(true, null)
+                    }
                 is ApiResult.Failure -> Pair(false, result.error.message)
             }
         } catch (e: Exception) {

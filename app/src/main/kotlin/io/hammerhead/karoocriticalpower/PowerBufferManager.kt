@@ -1,6 +1,7 @@
 package io.hammerhead.karoocriticalpower
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -57,7 +58,12 @@ class PowerBufferManager(private val context: Context) {
     // Mutex for thread-safe access
     private val mutex = Mutex()
 
+    // Wall clock, persisted - used only to judge the age of restored state
     private var lastSampleTime: Long = 0L
+
+    // Monotonic clock, in-process only - used for gap detection between samples
+    private var lastSampleElapsed: Long = 0L
+
     private var sampleCount: Long = 0L
 
     // Completed once persisted state has been loaded (or load failed);
@@ -82,10 +88,12 @@ class PowerBufferManager(private val context: Context) {
      */
     suspend fun addSample(watts: Double) {
         mutex.withLock {
-            val now = System.currentTimeMillis()
+            // Monotonic clock for gap detection - wall clock can jump when the
+            // Karoo syncs GPS time. Wall clock is only used for persisted-state age.
+            val nowElapsed = SystemClock.elapsedRealtime()
 
-            if (lastSampleTime > 0) {
-                val sinceLast = now - lastSampleTime
+            if (lastSampleElapsed > 0) {
+                val sinceLast = nowElapsed - lastSampleElapsed
                 // Buffers assume 1 sample per second; drop faster duplicates
                 if (sinceLast < MIN_SAMPLE_INTERVAL_MS) return@withLock
 
@@ -104,7 +112,8 @@ class PowerBufferManager(private val context: Context) {
                 }
             }
 
-            lastSampleTime = now
+            lastSampleElapsed = nowElapsed
+            lastSampleTime = System.currentTimeMillis()
             sampleCount++
 
             buffers.values.forEach { buffer ->
@@ -147,6 +156,7 @@ class PowerBufferManager(private val context: Context) {
             logDiagnostic("RESET: Resetting buffers for new ride (samples=$sampleCount)")
             buffers.values.forEach { it.reset() }
             lastSampleTime = 0L
+            lastSampleElapsed = 0L
             sampleCount = 0L
             clearPersistedState()
         }

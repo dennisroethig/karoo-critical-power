@@ -8,6 +8,7 @@ import io.hammerhead.karooext.models.RideState
 import io.hammerhead.karooext.models.StreamState
 import io.hammerhead.karoocriticalpower.Durations
 import io.hammerhead.karoocriticalpower.PowerBufferManager
+import io.hammerhead.karoocriticalpower.data.ApiError
 import io.hammerhead.karoocriticalpower.data.PowerCurveRepository
 import io.hammerhead.karoocriticalpower.data.CriticalPowerSettings
 import io.hammerhead.karoocriticalpower.data.PrTimeframe
@@ -18,6 +19,7 @@ import io.hammerhead.karoocriticalpower.extensions.streamDataFlow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -32,6 +34,9 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
     companion object {
         private const val TAG = "KarooCriticalPower"
         private const val STREAM_RETRY_DELAY_MS = 5_000L
+        private const val FETCH_RETRY_DELAY_MS = 5 * 60_000L
+        private const val MAX_FETCH_RETRIES = 6
+        private const val CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000L
     }
 
     private lateinit var karooSystem: KarooSystemService
@@ -55,6 +60,9 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
 
     private var rideStateConsumerId: String? = null
 
+    private var fetchRetryJob: Job? = null
+    private var fetchRetryAttempts = 0
+
     // Callback to check if PR comparison should be shown
     private val showPrComparison: () -> Boolean = { currentSettings.showPrComparison }
 
@@ -68,7 +76,7 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
         super.onCreate()
         karooSystem = KarooSystemService(applicationContext)
         settingsDataStore = SettingsDataStore(applicationContext)
-        powerCurveRepository = PowerCurveRepository(applicationContext)
+        powerCurveRepository = PowerCurveRepository.getInstance(applicationContext)
         bufferManager = PowerBufferManager(applicationContext)
 
         serviceScope.launch {
@@ -85,10 +93,21 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
             startPowerStream()
 
             // Load settings and observe changes
+            var firstEmission = true
             settingsDataStore.settings.collect { settings ->
                 val previous = currentSettings
                 currentSettings = settings
                 Log.d(TAG, "Settings updated: configured=${settings.isConfigured}")
+
+                if (firstEmission) {
+                    firstEmission = false
+                    // Service start: only hit the network if the cache is stale
+                    if (settings.isConfigured) {
+                        val success = powerCurveRepository.fetchIfStale(settings, CACHE_MAX_AGE_MS)
+                        if (!success) scheduleFetchRetry()
+                    }
+                    return@collect
+                }
 
                 // Refetch only when something affecting the power curve changed
                 val fetchConfigChanged = previous.intervalsApiKey != settings.intervalsApiKey ||
@@ -168,11 +187,42 @@ class KarooCriticalPowerExtension : KarooExtension("karoo-critical-power", "1.0"
 
     private suspend fun fetchPowerCurve() {
         Log.d(TAG, "Fetching power curve from intervals.icu")
+        fetchRetryJob?.cancel()
+        fetchRetryAttempts = 0
         val success = powerCurveRepository.fetchPowerCurve(currentSettings)
         if (success) {
             Log.d(TAG, "Power curve fetched successfully")
+            fetchRetryAttempts = 0
         } else {
             Log.w(TAG, "Failed to fetch power curve: ${powerCurveRepository.lastError.value}")
+            scheduleFetchRetry()
+        }
+    }
+
+    /**
+     * Retry a failed fetch when the failure was network-related (the common
+     * case: garage with no WiFi at ride start). Capped so we don't ping
+     * forever on a ride with genuinely no connectivity.
+     */
+    private fun scheduleFetchRetry() {
+        if (powerCurveRepository.lastError.value !is ApiError.NetworkError) return
+        if (fetchRetryJob?.isActive == true) return
+
+        fetchRetryJob = serviceScope.launch {
+            while (fetchRetryAttempts < MAX_FETCH_RETRIES) {
+                delay(FETCH_RETRY_DELAY_MS)
+                if (!currentSettings.isConfigured) return@launch
+                fetchRetryAttempts++
+                Log.d(TAG, "Retrying power curve fetch (attempt $fetchRetryAttempts)")
+                val success = powerCurveRepository.fetchPowerCurve(currentSettings)
+                if (success) {
+                    fetchRetryAttempts = 0
+                    return@launch
+                }
+                // Stop retrying on non-network failures (bad credentials etc.)
+                if (powerCurveRepository.lastError.value !is ApiError.NetworkError) return@launch
+            }
+            Log.w(TAG, "Giving up on power curve fetch after $fetchRetryAttempts retries")
         }
     }
 

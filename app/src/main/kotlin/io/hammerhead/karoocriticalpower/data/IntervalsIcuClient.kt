@@ -1,6 +1,8 @@
 package io.hammerhead.karoocriticalpower.data
 
+import android.net.Uri
 import android.util.Log
+import io.hammerhead.karoocriticalpower.BuildConfig
 import io.hammerhead.karoocriticalpower.Durations
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -78,7 +80,7 @@ class IntervalsIcuClient(
     suspend fun fetchPowerCurve(timeframeDays: Int? = null): ApiResult<PowerCurveData> = withContext(Dispatchers.IO) {
         try {
             val url = buildUrl(timeframeDays)
-            Log.d(TAG, "Fetching power curve from: $url")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Fetching power curve from: $url")
 
             val request = Request.Builder()
                 .url(url)
@@ -98,7 +100,7 @@ class IntervalsIcuClient(
                     return@withContext ApiResult.Failure(ApiError.ParseError("Empty response from server"))
                 }
 
-                Log.d(TAG, "Response body (first 500 chars): ${body.take(500)}")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Response body (first 500 chars): ${body.take(500)}")
                 val data = parsePowerCurveResponse(body)
                 if (data != null) {
                     ApiResult.Success(data)
@@ -131,7 +133,7 @@ class IntervalsIcuClient(
     }
 
     private fun buildUrl(timeframeDays: Int?): String {
-        val baseUrl = "$BASE_URL/athlete/$athleteId/power-curves"
+        val baseUrl = "$BASE_URL/athlete/${Uri.encode(athleteId.trim())}/power-curves"
         val params = mutableListOf("type=Ride")
 
         if (timeframeDays != null) {
@@ -179,12 +181,13 @@ class IntervalsIcuClient(
                 }
             }
 
+            // An empty map here is a valid response with no ride data in the
+            // timeframe (new athlete, off-season window) - NOT a parse error
             if (durationToWatts.isEmpty()) {
                 Log.w(TAG, "No power curve data found in response")
-                return null
+            } else {
+                Log.d(TAG, "Parsed ${durationToWatts.size} power curve points")
             }
-
-            Log.d(TAG, "Parsed ${durationToWatts.size} power curve points")
             PowerCurveData(durationToWatts)
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing power curve response", e)
