@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-08-19
+
+### Fixed
+
+- **Warmup/previous-ride power leaking into a new ride** - Samples were fed to the buffers whenever the power meter was connected, even before pressing Start, and the time-based reset guard blocked the reset at ride start whenever the sensor had been streaming recently. Sampling is now gated on the ride actually recording, and buffers reset exactly on the Idle → Recording transition.
+- **Long stops wiping ride bests** - Resuming after a pause longer than 5 minutes (café stop, mechanical) re-triggered the "new ride" reset and destroyed all best averages from earlier in the ride. Resuming from pause no longer resets anything.
+- **Sensor dropouts inflating best averages** - Rolling windows were sample-count based, so a gap in the power stream stitched two separate efforts together (e.g. a "20-minute best" spanning a dropout). Gaps are now zero-filled so windows always cover contiguous time; sub-second duplicate samples are dropped.
+- **One stream error permanently freezing all fields** - An error in the power stream silently ended sample collection for the rest of the ride. The stream now restarts automatically after 5 seconds.
+- **Wrong stream/view cancelled when a field is on multiple pages** - Each data field start now cancels exactly its own polling loop instead of whichever started last, fixing frozen fields and leaked render loops.
+- **Restored bests could be clobbered on service restart** - Persisted-state loading now runs under the buffer lock and resets wait for it, closing two races from the v1.2.1 era.
+- **Final state persisting was fire-and-forget** - Buffer state is now flushed synchronously (with a timeout) on service shutdown, and also persisted on every pause.
+
+### Changed
+
+- **Battery: views only re-render on change** - All 12 data fields previously re-composed their Glance views every second regardless. They now skip rendering when the displayed values haven't changed.
+- **Fewer network calls** - The intervals.icu power curve is only refetched when credentials or the PR timeframe change (or at ride start), not on every settings write.
+- **Consolidated the 11 duration data types into one class** - A single duration registry now drives the data types, buffers, and API client (the duration list previously existed in four places). Data type IDs are unchanged, so existing ride profiles are unaffected.
+
+### Added
+
+- **Unit tests for the core rolling-average math** (`PowerBuffer`), including window wraparound, gap zero-fill, and restore semantics.
+
+### Removed
+
+- Dead code: unused status/aggregate APIs, the empty main screen, stale `QA_REVIEW.md`, unused parameters and imports.
+
 ## [1.3.1] - 2026-05-18
 
 ### Fixed

@@ -21,33 +21,6 @@ import kotlinx.serialization.json.Json
 private val Context.powerCurveDataStore: DataStore<Preferences> by preferencesDataStore(name = "power_curve_cache")
 
 /**
- * Status information for power curve data
- */
-data class PowerCurveStatus(
-    val isLoading: Boolean = false,
-    val lastError: ApiError? = null,
-    val lastFetchTime: Long? = null,
-    val isFromCache: Boolean = false,
-    val prCount: Int = 0
-) {
-    val hasData: Boolean get() = prCount > 0
-
-    fun formatLastFetch(): String {
-        if (lastFetchTime == null || lastFetchTime == 0L) return "Never"
-        val ageMs = System.currentTimeMillis() - lastFetchTime
-        val minutes = ageMs / (1000 * 60)
-        val hours = minutes / 60
-        val days = hours / 24
-        return when {
-            minutes < 1 -> "Just now"
-            minutes < 60 -> "$minutes min ago"
-            hours < 24 -> "$hours hr ago"
-            else -> "$days day${if (days > 1) "s" else ""} ago"
-        }
-    }
-}
-
-/**
  * Repository for managing power curve (PR) data from intervals.icu.
  * Caches data to device storage so PRs are available even without internet.
  */
@@ -75,15 +48,6 @@ class PowerCurveRepository(private val context: Context) {
     val isFromCache: StateFlow<Boolean> = _isFromCache.asStateFlow()
 
     private val json = Json { ignoreUnknownKeys = true }
-
-    val status: PowerCurveStatus
-        get() = PowerCurveStatus(
-            isLoading = _isLoading.value,
-            lastError = _lastError.value,
-            lastFetchTime = _lastFetchTime.value,
-            isFromCache = _isFromCache.value,
-            prCount = _powerCurve.value?.durationToWatts?.size ?: 0
-        )
 
     init {
         // Load cached data on init

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -27,36 +28,41 @@ private val Context.bufferDataStore by preferencesDataStore(name = "power_buffer
  * - Thread-safe access via mutex
  * - Persistence of best values to survive service restarts
  * - Diagnostic logging for post-ride analysis
+ *
+ * The caller (extension service) is responsible for only feeding samples while
+ * a ride is recording, and for calling [resetForNewRide] on an Idle -> Recording
+ * transition. Gaps in the stream (sensor dropouts, pauses) are zero-filled so
+ * rolling windows never stitch non-contiguous efforts together.
  */
 class PowerBufferManager(private val context: Context) {
 
     companion object {
         private const val TAG = "PowerBufferManager"
 
-        // All supported durations in seconds
-        val DURATIONS = listOf(5, 15, 30, 60, 180, 300, 1200, 1800, 2700, 3600, 5400)
+        // Ignore samples arriving faster than this (buffers assume 1s granularity)
+        private const val MIN_SAMPLE_INTERVAL_MS = 500L
+
+        // Persisted state older than this is discarded on restore
+        private const val STATE_MAX_AGE_MS = 2 * 60 * 60 * 1000L
 
         // Keys for persisted state
         private fun bestAverageKey(duration: Int) = doublePreferencesKey("best_avg_$duration")
-        private val RIDE_START_TIME_KEY = longPreferencesKey("ride_start_time")
         private val LAST_SAMPLE_TIME_KEY = longPreferencesKey("last_sample_time")
         private val SAMPLE_COUNT_KEY = longPreferencesKey("sample_count")
     }
 
     // Single set of buffers for all durations
-    private val buffers: Map<Int, PowerBuffer> = DURATIONS.associateWith { PowerBuffer(it) }
+    private val buffers: Map<Int, PowerBuffer> = Durations.SECONDS.associateWith { PowerBuffer(it) }
 
     // Mutex for thread-safe access
     private val mutex = Mutex()
 
-    // Track ride timing for reset guard
-    private var rideStartTime: Long = 0L
     private var lastSampleTime: Long = 0L
     private var sampleCount: Long = 0L
 
-    // Flag to prevent resets before persisted state is loaded
-    @Volatile
-    private var stateLoaded: Boolean = false
+    // Completed once persisted state has been loaded (or load failed);
+    // resets wait on this so they can't race the restore.
+    private val stateLoaded = CompletableDeferred<Unit>()
 
     // Diagnostic log file
     private val logFile: File by lazy {
@@ -72,11 +78,32 @@ class PowerBufferManager(private val context: Context) {
 
     /**
      * Add a power sample to all buffers.
-     * This should only be called from ONE place (the stream).
+     * This should only be called from ONE place (the stream) and only while recording.
      */
     suspend fun addSample(watts: Double) {
         mutex.withLock {
             val now = System.currentTimeMillis()
+
+            if (lastSampleTime > 0) {
+                val sinceLast = now - lastSampleTime
+                // Buffers assume 1 sample per second; drop faster duplicates
+                if (sinceLast < MIN_SAMPLE_INTERVAL_MS) return@withLock
+
+                // Zero-fill missed seconds so windows stay time-contiguous
+                // (sensor dropouts and pauses must not stitch efforts together)
+                val missedSeconds = (sinceLast / 1000L).toInt() - 1
+                if (missedSeconds in 1..Durations.MAX_SECONDS) {
+                    repeat(missedSeconds) {
+                        buffers.values.forEach { it.addSample(0.0) }
+                    }
+                    logDiagnostic("GAP_FILL: Zero-filled ${missedSeconds}s gap")
+                } else if (missedSeconds > Durations.MAX_SECONDS) {
+                    // Gap longer than the longest window: clear windows, keep bests
+                    buffers.values.forEach { it.clearWindow() }
+                    logDiagnostic("GAP_CLEAR: Cleared windows after ${missedSeconds}s gap")
+                }
+            }
+
             lastSampleTime = now
             sampleCount++
 
@@ -110,82 +137,39 @@ class PowerBufferManager(private val context: Context) {
     }
 
     /**
-     * Check if a buffer is ready (has enough samples).
-     */
-    suspend fun isReady(durationSeconds: Int): Boolean {
-        mutex.withLock {
-            return buffers[durationSeconds]?.isReady() ?: false
-        }
-    }
-
-    /**
-     * Get all best averages as a map.
-     */
-    suspend fun getAllBestAverages(): Map<Int, Double?> {
-        mutex.withLock {
-            return DURATIONS.associateWith { buffers[it]?.getBestAverage() }
-        }
-    }
-
-    /**
-     * Get all current rolling averages as a map.
-     */
-    suspend fun getAllCurrentAverages(): Map<Int, Double?> {
-        mutex.withLock {
-            return DURATIONS.associateWith { buffers[it]?.getCurrentAverage() }
-        }
-    }
-
-    /**
      * Reset all buffers for a new ride.
-     * Includes guard logic to prevent accidental mid-ride resets.
+     * Call this only on a genuine Idle -> Recording transition.
+     * Waits for persisted-state loading so a reset can't race the restore.
      */
-    suspend fun resetForNewRide(force: Boolean = false) {
+    suspend fun resetForNewRide() {
+        stateLoaded.await()
         mutex.withLock {
-            val now = System.currentTimeMillis()
-            val timeSinceLastSample = now - lastSampleTime
-            val rideElapsed = now - rideStartTime
-
-            // Guard: Don't reset if we have recent data and significant ride time
-            // Block reset if persisted state hasn't loaded yet (race condition on service restart)
-            if (!stateLoaded && !force) {
-                logDiagnostic("RESET_DEFERRED: State not yet loaded, blocking reset")
-                Log.w(TAG, "Blocking reset - persisted state not yet loaded")
-                return@withLock
-            }
-
-            // Allow reset if:
-            // - force is true (explicit user action)
-            // - No samples in last 5 minutes (ride probably ended)
-            // - Less than 60 seconds of ride time (just started)
-            val shouldReset = force ||
-                timeSinceLastSample > 5 * 60 * 1000 ||
-                rideElapsed < 60 * 1000
-
-            if (shouldReset) {
-                logDiagnostic("RESET: Resetting buffers (force=$force, samples=$sampleCount, " +
-                    "timeSinceLastSample=${timeSinceLastSample}ms, rideElapsed=${rideElapsed}ms)")
-
-                buffers.values.forEach { it.reset() }
-                rideStartTime = now
-                sampleCount = 0L
-
-                // Clear persisted state
-                clearPersistedState()
-            } else {
-                logDiagnostic("RESET_BLOCKED: Ignored reset request (samples=$sampleCount, " +
-                    "timeSinceLastSample=${timeSinceLastSample}ms, rideElapsed=${rideElapsed}ms)")
-                Log.w(TAG, "Blocked suspicious reset request mid-ride")
-            }
+            logDiagnostic("RESET: Resetting buffers for new ride (samples=$sampleCount)")
+            buffers.values.forEach { it.reset() }
+            lastSampleTime = 0L
+            sampleCount = 0L
+            clearPersistedState()
         }
     }
 
     /**
-     * Called when service is being destroyed - persist current state.
+     * Called when the ride ends (Idle). The persisted state only exists to
+     * survive a service restart mid-ride, so it can be discarded now — this
+     * prevents a finished ride's bests leaking into the next ride.
      */
-    suspend fun onServiceDestroy() {
+    suspend fun onRideEnded() {
         mutex.withLock {
-            logDiagnostic("SERVICE_DESTROY: Persisting state (samples=$sampleCount)")
+            logDiagnostic("RIDE_ENDED: Clearing persisted state (samples=$sampleCount)")
+            clearPersistedState()
+        }
+    }
+
+    /**
+     * Persist current best values now (called on pause and service destroy).
+     */
+    suspend fun persistNow() {
+        mutex.withLock {
+            logDiagnostic("PERSIST_NOW: Persisting state (samples=$sampleCount)")
             persistBestValues()
         }
     }
@@ -193,12 +177,11 @@ class PowerBufferManager(private val context: Context) {
     private suspend fun persistBestValues() {
         try {
             context.bufferDataStore.edit { prefs ->
-                DURATIONS.forEach { duration ->
+                Durations.SECONDS.forEach { duration ->
                     buffers[duration]?.getBestAverage()?.let { best ->
                         prefs[bestAverageKey(duration)] = best
                     }
                 }
-                prefs[RIDE_START_TIME_KEY] = rideStartTime
                 prefs[LAST_SAMPLE_TIME_KEY] = lastSampleTime
                 prefs[SAMPLE_COUNT_KEY] = sampleCount
             }
@@ -213,35 +196,36 @@ class PowerBufferManager(private val context: Context) {
         try {
             val prefs = context.bufferDataStore.data.first()
 
-            rideStartTime = prefs[RIDE_START_TIME_KEY] ?: 0L
-            lastSampleTime = prefs[LAST_SAMPLE_TIME_KEY] ?: 0L
-            sampleCount = prefs[SAMPLE_COUNT_KEY] ?: 0L
+            mutex.withLock {
+                val persistedLastSample = prefs[LAST_SAMPLE_TIME_KEY] ?: 0L
+                val stateAge = System.currentTimeMillis() - persistedLastSample
 
-            // Check if persisted state is still valid (ride not too old)
-            val now = System.currentTimeMillis()
-            val stateAge = now - lastSampleTime
-
-            // Only restore if state is less than 2 hours old
-            if (stateAge < 2 * 60 * 60 * 1000 && lastSampleTime > 0) {
-                DURATIONS.forEach { duration ->
-                    prefs[bestAverageKey(duration)]?.let { best ->
-                        buffers[duration]?.restoreBestAverage(best)
+                if (persistedLastSample > 0 && stateAge < STATE_MAX_AGE_MS) {
+                    // Don't clobber live values if samples arrived before the load finished
+                    if (lastSampleTime == 0L) {
+                        lastSampleTime = persistedLastSample
+                        sampleCount = prefs[SAMPLE_COUNT_KEY] ?: 0L
                     }
+                    Durations.SECONDS.forEach { duration ->
+                        prefs[bestAverageKey(duration)]?.let { best ->
+                            buffers[duration]?.restoreBestAverage(best)
+                        }
+                    }
+                    logDiagnostic("STATE_RESTORED: Restored state from ${stateAge / 1000}s ago")
+                    Log.d(TAG, "Restored persisted state from ${stateAge / 1000}s ago")
+                } else if (persistedLastSample > 0) {
+                    logDiagnostic("STATE_EXPIRED: Persisted state too old (${stateAge / 1000}s), starting fresh")
+                    Log.d(TAG, "Persisted state too old, starting fresh")
+                    clearPersistedState()
                 }
-                logDiagnostic("STATE_RESTORED: Restored state from ${stateAge / 1000}s ago")
-                Log.d(TAG, "Restored persisted state from ${stateAge / 1000}s ago")
-            } else {
-                logDiagnostic("STATE_EXPIRED: Persisted state too old (${stateAge / 1000}s), starting fresh")
-                Log.d(TAG, "Persisted state too old, starting fresh")
-                clearPersistedState()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load persisted state", e)
             logDiagnostic("LOAD_ERROR: ${e.message}")
         } finally {
-            // Mark state as loaded (even on error) so reset guard can function
-            stateLoaded = true
-            logDiagnostic("STATE_LOAD_COMPLETE: stateLoaded=true")
+            // Mark state as loaded (even on error) so pending resets can proceed
+            stateLoaded.complete(Unit)
+            logDiagnostic("STATE_LOAD_COMPLETE")
         }
     }
 
@@ -269,28 +253,6 @@ class PowerBufferManager(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write diagnostic log", e)
-        }
-    }
-
-    /**
-     * Get the diagnostic log contents for debugging.
-     */
-    fun getDiagnosticLog(): String {
-        return try {
-            if (logFile.exists()) logFile.readText() else "No diagnostic log available"
-        } catch (e: Exception) {
-            "Error reading log: ${e.message}"
-        }
-    }
-
-    /**
-     * Clear the diagnostic log.
-     */
-    fun clearDiagnosticLog() {
-        try {
-            logFile.delete()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to clear diagnostic log", e)
         }
     }
 }

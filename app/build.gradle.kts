@@ -13,8 +13,8 @@ android {
         applicationId = "io.hammerhead.karoocriticalpower"
         minSdk = 23
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.3.1"
+        versionCode = 8
+        versionName = "1.4.0"
     }
 
     signingConfigs {
@@ -55,4 +55,6 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.glance.appwidget)
+
+    testImplementation(libs.junit)
 }

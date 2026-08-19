@@ -53,6 +53,17 @@ class PowerBuffer(
     fun getCurrentAverage(): Double? = if (count >= bufferSize) currentSum / bufferSize else null
 
     /**
+     * Clear the rolling window (e.g. after a long gap in the power stream)
+     * while keeping the best average recorded so far.
+     */
+    fun clearWindow() {
+        buffer.fill(0.0)
+        index = 0
+        count = 0
+        currentSum = 0.0
+    }
+
+    /**
      * Reset the buffer for a new ride.
      */
     fun reset() {

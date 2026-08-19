@@ -1,7 +1,5 @@
 package io.hammerhead.karoocriticalpower.data
 
-import kotlinx.serialization.Serializable
-
 /**
  * Timeframe options for PR comparison
  */
@@ -15,7 +13,6 @@ enum class PrTimeframe(val days: Int?, val displayName: String) {
 /**
  * Settings for the Karoo Critical Power extension
  */
-@Serializable
 data class CriticalPowerSettings(
     val intervalsApiKey: String = "",
     val intervalsAthleteId: String = "",

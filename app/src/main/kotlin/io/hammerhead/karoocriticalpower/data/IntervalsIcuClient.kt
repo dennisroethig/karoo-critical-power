@@ -1,6 +1,7 @@
 package io.hammerhead.karoocriticalpower.data
 
 import android.util.Log
+import io.hammerhead.karoocriticalpower.Durations
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -61,16 +62,11 @@ class IntervalsIcuClient(
         private const val TAG = "IntervalsIcuClient"
         private const val BASE_URL = "https://intervals.icu/api/v1"
 
-        // Durations we care about (in seconds)
-        val TARGET_DURATIONS = listOf(5, 15, 30, 60, 180, 300, 1200, 1800, 2700, 3600, 5400)
-
         private val httpClient = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
     }
-
-    private val client get() = httpClient
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -90,7 +86,7 @@ class IntervalsIcuClient(
                 .get()
                 .build()
 
-            client.newCall(request).execute().use { response ->
+            httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     Log.e(TAG, "API request failed: ${response.code} ${response.message}")
                     return@withContext ApiResult.Failure(categorizeHttpError(response.code, response.message))
@@ -211,7 +207,7 @@ class IntervalsIcuClient(
                 val power = watts[i].jsonPrimitive.double
 
                 // Only store if it's one of our target durations
-                if (duration in TARGET_DURATIONS && power > 0) {
+                if (duration in Durations.SECONDS && power > 0) {
                     result[duration] = power
                     Log.d(TAG, "Found power for ${duration}s: ${power}W")
                 }
